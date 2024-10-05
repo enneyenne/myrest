@@ -1,0 +1,60 @@
+services:
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:9.1.8
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH:="/var/lib/grafana/dashboards/test-metrics.json"
+    networks:
+      - app_network
+    ports:
+      - "3000:3000"
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.54.1
+    networks:
+      - app_network
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - management.endpoints.web.exposure.include=*
+      - management.endpoint.health.show.details=always
+      - management.tracing.sampling.probability=1.0
+    networks:
+      - app_network
+    depends_on:
+      - prometheus
+    ports:
+      - '8080:8080'
+
+  k6:
+    container_name: k6
+    image: grafana/k6:latest
+    networks:
+      - app_network
+    ports:
+      - "6565:6565"
+    volumes:
+      - ./scripts:/scripts
+    command: run /scripts/http-get.js
+
+networks:
+  app_network:
+    enable_ipv6: false
+    driver: bridge
